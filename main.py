@@ -1,12 +1,20 @@
 import arxiv
 import matplotlib.pyplot as plt
+import os
 from collections import Counter
 from datetime import datetime
 
 
+def ensure_results_directory():
+    """Create results directory if it doesn't exist."""
+    if not os.path.exists("results"):
+        os.makedirs("results")
+        print("Created 'results' directory")
+
+
 def count_papers_by_year(topic_name, search_query, max_results=5000):
     """
-    Count papers by year for a given arXiv search query.
+    Count papers by year for a given arXiv search query and collect paper details.
 
     Args:
         topic_name (str): Display name for the topic
@@ -14,20 +22,20 @@ def count_papers_by_year(topic_name, search_query, max_results=5000):
         max_results (int): Maximum number of papers to retrieve
 
     Returns:
-        dict: Year -> count mapping
+        tuple: (yearly_counts, papers_list) where yearly_counts is dict Year->count,
+               and papers_list is list of dicts with paper details
     """
     print(f"\nSearching for {topic_name} papers...")
     print(f"Query: {search_query}")
 
-    # Configure client with polite delays (arXiv recommends 3 seconds)[citation:2]
+    # Configure client with polite delays
     client = arxiv.Client(
-        page_size=100,  # Results per API request
-        delay_seconds=3.0,  # Polite delay between requests
-        num_retries=5  # Retry failed requests
+        page_size=100,
+        delay_seconds=3.0,
+        num_retries=5
     )
 
     # Create search object
-    # Sort by submission date to get chronological results[citation:8]
     search = arxiv.Search(
         query=search_query,
         max_results=max_results,
@@ -36,16 +44,29 @@ def count_papers_by_year(topic_name, search_query, max_results=5000):
     )
 
     yearly_counts = Counter()
+    papers_list = []  # List to store paper details
     total_processed = 0
 
     try:
-        # Client.results() returns a generator[citation:1]
+        # Client.results() returns a generator
         for result in client.results(search):
             # Extract year from published date
             if result.published:
                 year = result.published.year
                 yearly_counts[year] += 1
                 total_processed += 1
+
+                # Store paper details
+                paper_info = {
+                    'title': result.title,
+                    'url': result.entry_id,
+                    'year': year,
+                    'authors': [author.name for author in result.authors],
+                    'summary': result.summary,
+                    'published': result.published.isoformat(),
+                    'categories': result.categories
+                }
+                papers_list.append(paper_info)
 
             # Progress indicator for large result sets
             if total_processed % 500 == 0:
@@ -57,17 +78,17 @@ def count_papers_by_year(topic_name, search_query, max_results=5000):
     print(f"Total {topic_name} papers processed: {total_processed}")
 
     # Convert to regular dict and sort by year
-    return dict(sorted(yearly_counts.items()))
+    return dict(sorted(yearly_counts.items())), papers_list
 
 
-def create_comparison_chart(xai_counts, xrl_counts, output_file="xai_vs_xrl_trends.png"):
+def create_comparison_chart(xai_counts, xrl_counts):
     """
     Create a comparative bar chart for XAI and XRL publication trends.
+    Saves chart to results directory.
 
     Args:
         xai_counts (dict): XAI yearly counts
         xrl_counts (dict): XRL yearly counts
-        output_file (str): Name for output chart file
     """
     # Prepare data for plotting
     all_years = sorted(set(list(xai_counts.keys()) + list(xrl_counts.keys())))
@@ -77,7 +98,7 @@ def create_comparison_chart(xai_counts, xrl_counts, output_file="xai_vs_xrl_tren
 
     if not all_years:
         print("No data to plot.")
-        return
+        return None, None
 
     # Get counts for each year
     xai_values = [xai_counts.get(year, 0) for year in all_years]
@@ -150,25 +171,64 @@ def create_comparison_chart(xai_counts, xrl_counts, output_file="xai_vs_xrl_tren
 
     plt.tight_layout()
 
-    # Save and show
+    # Save to results directory
+    output_file = os.path.join("results", "xai_vs_xrl_trends.png")
     plt.savefig(output_file, dpi=300, bbox_inches='tight')
     print(f"\nChart saved as '{output_file}'")
-    plt.show()
 
     return fig, ax
 
 
-def save_results_to_csv(xai_counts, xrl_counts, filename="xai_xrl_analysis.csv"):
+def save_papers_to_csv(papers_list, topic_name):
     """
-    Save yearly counts to a CSV file for further analysis.
+    Save paper details to a CSV file in results directory.
+
+    Args:
+        papers_list (list): List of paper dictionaries
+        topic_name (str): Name of the topic for filename
+    """
+    if not papers_list:
+        print(f"No papers to save for {topic_name}")
+        return
+
+    # Create safe filename from topic name
+    safe_topic = "".join(c if c.isalnum() else "_" for c in topic_name)
+    filename = os.path.join("results", f"{safe_topic}_papers.csv")
+
+    with open(filename, 'w', encoding='utf-8') as f:
+        # Write header
+        f.write("Title,URL,Year,Authors,Published,Categories\n")
+
+        # Write paper details
+        for paper in papers_list:
+            # Escape quotes in title and clean up
+            title = paper['title'].replace('"', '""')
+            url = paper['url']
+            year = paper['year']
+
+            # Format authors as semicolon-separated list
+            authors = ";".join(paper['authors']).replace('"', '""')
+            published = paper['published']
+            categories = ";".join(paper['categories'])
+
+            # Write CSV line
+            f.write(f'"{title}","{url}",{year},"{authors}","{published}","{categories}"\n')
+
+    print(f"Saved {len(papers_list)} {topic_name} papers to '{filename}'")
+
+
+def save_results_to_csv(xai_counts, xrl_counts):
+    """
+    Save yearly counts to a CSV file in results directory.
 
     Args:
         xai_counts (dict): XAI yearly counts
         xrl_counts (dict): XRL yearly counts
-        filename (str): Output CSV filename
     """
     all_years = sorted(set(list(xai_counts.keys()) + list(xrl_counts.keys())))
     all_years = [year for year in all_years if year >= 2000]
+
+    filename = os.path.join("results", "xai_xrl_yearly_counts.csv")
 
     with open(filename, 'w', encoding='utf-8') as f:
         f.write("Year,XAI_Papers,XRL_Papers,Total_Papers,XRL_Percentage\n")
@@ -181,10 +241,10 @@ def save_results_to_csv(xai_counts, xrl_counts, filename="xai_xrl_analysis.csv")
 
             f.write(f"{year},{xai},{xrl},{total},{percentage:.1f}\n")
 
-    print(f"Data saved to '{filename}'")
+    print(f"Yearly counts saved to '{filename}'")
 
 
-if __name__ == "__main__":
+def main():
     """
     Main function to execute the arXiv analysis.
     """
@@ -193,25 +253,23 @@ if __name__ == "__main__":
     print("Using arxiv.py Python package")
     print("=" * 70)
 
-    # Define search queries using arXiv query syntax[citation:7]
-    # Search in titles, abstracts, and comments
+    # Ensure results directory exists
+    ensure_results_directory()
+
+    # Define search queries using arXiv query syntax
     xai_query = 'abs:("explainable AI" OR "interpretable AI" OR XAI OR "explainable artificial intelligence")'
     xrl_query = 'abs:("explainable reinforcement learning" OR "interpretable reinforcement learning" OR XRL OR "explainable RL")'
 
-    # You can also search specific fields[citation:7]:
-    # xai_query = 'ti:"explainable AI" OR abs:"interpretable AI" OR all:XAI'
-    # xrl_query = 'ti:"explainable reinforcement learning" OR abs:XRL'
-
-    # Get yearly counts
+    # Get yearly counts and paper details
     print("\n" + "=" * 70)
-    xai_counts = count_papers_by_year(
+    xai_counts, xai_papers = count_papers_by_year(
         "Explainable AI (XAI)",
         xai_query,
-        max_results=10000  # Adjust based on expected volume
+        max_results=10000
     )
 
     print("\n" + "=" * 70)
-    xrl_counts = count_papers_by_year(
+    xrl_counts, xrl_papers = count_papers_by_year(
         "Explainable Reinforcement Learning (XRL)",
         xrl_query,
         max_results=5000
@@ -232,16 +290,38 @@ if __name__ == "__main__":
         print(f"XRL year range: {min(years)} to {max(years)}")
         print(f"XRL total papers: {sum(xrl_counts.values()):,}")
 
-    # Create visualization
+    # Save paper details to CSV
+    print("\n" + "=" * 70)
+    print("SAVING PAPER DETAILS")
+    print("=" * 70)
+
+    save_papers_to_csv(xai_papers, "XAI")
+    save_papers_to_csv(xrl_papers, "XRL")
+
+    # Save yearly counts
+    save_results_to_csv(xai_counts, xrl_counts)
+
+    # Create and save visualization
     print("\n" + "=" * 70)
     print("CREATING VISUALIZATION")
     print("=" * 70)
 
-    create_comparison_chart(xai_counts, xrl_counts)
+    fig, ax = create_comparison_chart(xai_counts, xrl_counts)
 
-    # Save data
-    save_results_to_csv(xai_counts, xrl_counts)
+    # Show the plot if we have one
+    if fig:
+        plt.show()
 
     print("\n" + "=" * 70)
     print("ANALYSIS COMPLETE")
     print("=" * 70)
+    print("All results saved in the 'results' directory:")
+    print(f"  - xai_vs_xrl_trends.png (chart)")
+    print(f"  - xai_xrl_yearly_counts.csv (yearly statistics)")
+    print(f"  - XAI_papers.csv (detailed XAI paper list)")
+    print(f"  - XRL_papers.csv (detailed XRL paper list)")
+    print("=" * 70)
+
+
+if __name__ == "__main__":
+    main()
