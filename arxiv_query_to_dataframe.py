@@ -52,24 +52,24 @@ def arxiv_query_to_dataframe(search_query, max_results=None):
     try:
         # Client.results() returns a generator
         for result in client.results(search):
-            if result.published:
-                # Extract paper details
-                paper_info = {
-                    'title': result.title,
-                    'url': result.entry_id,
-                    "arxiv_id": extract_arxiv_id(result.entry_id),
-                    'doi': result.doi,
-                    'year': result.published.year,
-                    'month': result.published.month,
-                    'published_date': result.published,
-                    'authors': [author.name for author in result.authors],
-                    'summary': result.summary,
-                    'categories': result.categories,
-                    'primary_category': result.primary_category,
-                    'updated': result.updated if hasattr(result, 'updated') else None,
-                }
-                papers_data.append(paper_info)
-                total_processed += 1
+            # Extract paper details
+            paper_info = {
+                'title': result.title,
+                'url': result.entry_id,
+                "arxiv_id": extract_arxiv_id(result.entry_id),
+                'doi': result.doi,
+                'year': result.published.year,
+                'month': result.published.month,
+                'published': result.published,
+                'published_date': result.published,
+                'authors': [author.name for author in result.authors],
+                'summary': result.summary,
+                'categories': result.categories,
+                'primary_category': result.primary_category,
+                'updated': result.updated if hasattr(result, 'updated') else None,
+            }
+            papers_data.append(paper_info)
+            total_processed += 1
 
             # Progress indicator
             if total_processed % 100 == 0:
