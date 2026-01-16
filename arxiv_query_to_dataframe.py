@@ -1,6 +1,19 @@
 import arxiv
 import pandas as pd
+import re
 import time
+from typing import Optional
+
+
+def extract_arxiv_id(arxiv_url: str) -> Optional[str]:
+    """
+    Extract the arXiv id (without version suffix) from an arXiv URL like:
+    https://arxiv.org/abs/2301.12345v2 -> 2301.12345
+    """
+    if not arxiv_url:
+        return None
+    m = re.search(r"arxiv\.org/abs/([^v/]+)", arxiv_url)
+    return m.group(1) if m else None
 
 
 def arxiv_query_to_dataframe(search_query, max_results=None):
@@ -44,6 +57,8 @@ def arxiv_query_to_dataframe(search_query, max_results=None):
                 paper_info = {
                     'title': result.title,
                     'url': result.entry_id,
+                    "arxiv_id": extract_arxiv_id(result.entry_id),
+                    'doi': result.doi,
                     'year': result.published.year,
                     'month': result.published.month,
                     'published_date': result.published,

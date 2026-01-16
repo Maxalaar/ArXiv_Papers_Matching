@@ -42,7 +42,6 @@ def plot_papers_per_year(df: pd.DataFrame,
     bars = ax.bar(papers_per_year.index.astype(str), papers_per_year.values, color=color)
 
     # Customize the plot
-    ax.set_title(title, fontsize=16, fontweight='bold')
     ax.set_xlabel('Year', fontsize=12)
     ax.set_ylabel('Number of Papers', fontsize=12)
 
