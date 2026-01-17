@@ -39,5 +39,5 @@ if __name__ == "__main__":
             results_path=results_path,
             force_download=True,
             # max_results=200,
-            # use_citations=False,
+            use_citations=True,
         )
